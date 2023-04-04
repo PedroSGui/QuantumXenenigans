@@ -1,0 +1,3 @@
+1.1.4
+
+['C:\\Users\\circleci\\AppData\\Local\\Temp\\cibw-run-j1x6d_ry\\cp310-win_amd64\\build\\venv\\Scripts\\delvewheel', 'repair', '-w', 'C:\\Users\\circleci\\AppData\\Local\\Temp\\cibw-run-j1x6d_ry\\cp310-win_amd64\\repaired_wheel', 'C:\\Users\\circleci\\AppData\\Local\\Temp\\cibw-run-j1x6d_ry\\cp310-win_amd64\\built_wheel\\dwave_preprocessing-0.5.4-cp310-cp310-win_amd64.whl']

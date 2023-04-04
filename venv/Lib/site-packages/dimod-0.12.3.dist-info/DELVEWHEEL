@@ -1,0 +1,3 @@
+1.1.2
+
+['C:\\Users\\circleci\\AppData\\Local\\Temp\\cibw-run-k0g19hn0\\cp310-win_amd64\\build\\venv\\Scripts\\delvewheel', 'repair', '-w', 'C:\\Users\\circleci\\AppData\\Local\\Temp\\cibw-run-k0g19hn0\\cp310-win_amd64\\repaired_wheel', 'C:\\Users\\circleci\\AppData\\Local\\Temp\\cibw-run-k0g19hn0\\cp310-win_amd64\\built_wheel\\dimod-0.12.3-cp310-cp310-win_amd64.whl']
