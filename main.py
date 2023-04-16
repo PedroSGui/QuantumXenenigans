@@ -1,83 +1,91 @@
-import numpy as np
-import dimod
-from dwave.system import LeapHybridSampler
+import pandapower as pp
+import time
+import os
 
-# Number of time steps
-T = 24
+def create_ieee_6bus_system():
+    net = pp.create_empty_network()
 
-# Define the number of components
-num_SOLAR = 1
-num_WIND = 1
-num_ESS = 1
-num_L = 3
-num_GC = 1
+    # Create buses
+    bus_data = [(0, 138), (1, 138), (2, 138), (3, 69), (4, 69), (5, 69)]
+    for b in bus_data:
+        pp.create_bus(net, vn_kv=b[1], name=f"Bus {b[0] + 1}")
 
-# Create a realistic solar generation profile
-def solar_profile(t, amplitude=100, shift=12, omega=0.5):
-    return amplitude * np.sin(omega * (t - shift))
+    # Create external grid
+    pp.create_ext_grid(net, bus=0)
 
-# Create a realistic wind generation profile
-def wind_profile(t, amplitude=100, shift=6, sigma=5):
-    return amplitude * np.exp(-0.5 * ((t - shift) / sigma) ** 2)
+    # Create generators
+    gen_data = [(1, 0), (2, 1), (3, 2)]
+    for g in gen_data:
+        pp.create_gen(net, bus=g[1], p_mw=g[0], vm_pu=1.0)
 
-# Create a realistic load profile
-def load_profile(t, base_demand=120, delta_demand=50, morning_shift=8, evening_shift=20):
-    return base_demand + delta_demand * (np.sin(0.25 * (t - morning_shift)) + np.sin(0.25 * (t - evening_shift)))
+    # Create loads
+    load_data = [(0.9, 3), (0.9, 4), (0.9, 5)]
+    for l in load_data:
+        pp.create_load(net, bus=l[1], p_mw=l[0])
 
-# Generate realistic capacity values for components
-timesteps = np.arange(T)
-solar_capacity = np.array([solar_profile(t) for t in timesteps])
-wind_capacity = np.array([wind_profile(t) for t in timesteps])
-ESS_capacity = np.random.randint(100, 500, size=(num_ESS, T))
-L_demand = np.array([[load_profile(t) for t in timesteps] for _ in range(num_L)])
-GC_capacity = np.random.randint(50, 300, size=(num_GC, T))
+    # Create lines
+    line_data = [(0, 1, 0.10, 0.20), (0, 3, 0.05, 0.20), (0, 4, 0.08, 0.30), (1, 2, 0.05, 0.25), (1, 5, 0.10, 0.35), (2, 3, 0.05, 0.12), (2, 4, 0.05, 0.20), (3, 5, 0.03, 0.08)]
+    for line in line_data:
+        pp.create_line_from_parameters(net, from_bus=line[0], to_bus=line[1], length_km=1, r_ohm_per_km=line[2], x_ohm_per_km=line[3], c_nf_per_km=0, max_i_ka=1)
 
-# Define cost coefficients for components
-cost_SOLAR = np.random.uniform(0.05, 0.15, num_SOLAR)
-cost_WIND = np.random.uniform(0.05, 0.15, num_WIND)
-cost_ESS = np.random.uniform(0.05, 0.15, num_ESS)
-cost_GC = np.random.uniform(0.1, 0.2, num_GC)
+    # Create transformers
+    trafo_data = [(1, 4, 0.10, 0.4), (2, 5, 0.08, 0.2)]
+    for trafo in trafo_data:
+        pp.create_transformer_from_parameters(net, hv_bus=trafo[0], lv_bus=trafo[1], sn_mva=1, vn_hv_kv=138, vn_lv_kv=69, vkr_percent=trafo[2], vk_percent=trafo[3], pfe_kw=0, i0_percent=0)
 
-# Convert the microgrid optimization problem to a QUBO problem
-def microgrid_qubo():
-    qubo = dimod.AdjDictBQM.empty(dimod.BINARY)
+    return net
 
-    # Power balance constraints
-    for t in range(T):
-        for s in range(num_SOLAR):
-            for w in range(num_WIND):
-                for e in range(num_ESS):
-                    for l in range(num_L):
-                        for g in range(num_GC):
-                            variable = (t, s, w, e, l, g)
-                            qubo.add_variable(variable, cost_SOLAR[s] + cost_WIND[w] + cost_ESS[e] + cost_GC[g])
-                            for t_prime in range(t + 1, T):
-                                variable_prime = (t_prime, s, w, e, l, g)
-                                qubo.add_interaction(variable, variable_prime, -(solar_capacity[t] + wind_capacity[t] + ESS_capacity[e, t] - L_demand[l, t] - GC_capacity[g, t]))
+def run_conventional():
+    # Run power flow
+    pp.runpp(net)
+    a = time.time() - t0
+    print("Convencional Demorou: ",a,"s\n\n")
 
-    # Add operational constraints here, if needed
+    # Print results
+    print("\nBus Results:")
+    print(net.res_bus)
 
-    return qubo
+    print("\nLine Results:")
+    print(net.res_line)
 
-# Create the QUBO
-bqm = microgrid_qubo()
+    print("\nTransformer Results:")
+    print(net.res_trafo)
 
-# Use D-Wave's Leap Hybrid Solver
-sampler = LeapHybridSampler()
-sampleset = sampler.sample(bqm)
+    print("\nGenerator Results:")
+    print(net.res_gen)
 
-# Get the lowest energy sample (solution)
-solution = sampleset.first.sample
+    print("\nLoad Results:")
+    print(net.res_load)
 
-# Extract the optimal dispatch schedule from the solution
-optimal_schedule = np.zeros((T, num_SOLAR + num_WIND + num_ESS + num_L + num_GC))
-for t, s, w, e, l, g in solution:
-    if solution[(t, s, w, e, l, g)]:
-        optimal_schedule[t, s] = solar_capacity[t]
-        optimal_schedule[t, num_SOLAR + w] = wind_capacity[t]
-        optimal_schedule[t, num_SOLAR + num_WIND + e] = ESS_capacity[e, t]
-        optimal_schedule[t, num_SOLAR + num_WIND + num_ESS + l] = L_demand[l, t]
-        optimal_schedule[t, num_SOLAR + num_WIND + num_ESS + num_L + g] = GC_capacity[g, t]
+def run_quantum():
+    # Run power flow
+    pp.runpp(net)
+    a = time.time() - t0
+    print("Convencional Demorou: ",a,"s\n\n")
 
-print("Optimal dispatch schedule:")
-print(optimal_schedule)
+    # Print results
+    print("\nBus Results:")
+    print(net.res_bus)
+
+    print("\nLine Results:")
+    print(net.res_line)
+
+    print("\nTransformer Results:")
+    print(net.res_trafo)
+
+    print("\nGenerator Results:")
+    print(net.res_gen)
+
+    print("\nLoad Results:")
+    print(net.res_load)
+
+
+# Test the create_ieee_6bus_system function
+if __name__ == "__main__":
+    os.system('cls' if os.name == 'nt' else 'clear')
+    t0 = time.time()
+    net = create_ieee_6bus_system()
+
+    run_conventional()
+    
+    
